@@ -1,5 +1,7 @@
 import os
 from mailustart import resolve
+import logging as log
+import sys
 
 DEFAULT_CONFIG = {
     # Specific to the admin UI
@@ -7,8 +9,8 @@ DEFAULT_CONFIG = {
     'BABEL_DEFAULT_LOCALE': 'en',
     'BABEL_DEFAULT_TIMEZONE': 'UTC',
     'BOOTSTRAP_SERVE_LOCAL': True,
-    'RATELIMIT_STORAGE_URL': 'redis://redis/2',
-    'QUOTA_STORAGE_URL': 'redis://redis/1',
+    'RATELIMIT_STORAGE_URL': '',
+    'QUOTA_STORAGE_URL': '',
     'DEBUG': False,
     'DOMAIN_REGISTRATION': False,
     'TEMPLATES_AUTO_RELOAD': True,
@@ -50,13 +52,19 @@ DEFAULT_CONFIG = {
     'RECAPTCHA_PRIVATE_KEY': '',
     # Advanced settings
     'PASSWORD_SCHEME': 'BLF-CRYPT',
+    'LOG_LEVEL': 'WARNING',
     # Host settings
     'HOST_IMAP': 'imap',
+    'HOST_LMTP': 'imap:2525',
     'HOST_POP3': 'imap',
     'HOST_SMTP': 'smtp',
+    'HOST_AUTHSMTP': 'smtp',
+    'HOST_ADMIN': 'admin',
+    'HOST_ANTISPAM': 'antispam:11334',
     'HOST_WEBMAIL': 'webmail',
+    'HOST_WEBDAV': 'webdav:5232',
+    'HOST_REDIS': 'redis',
     'HOST_FRONT': 'front',
-    'HOST_AUTHSMTP': os.environ.get('HOST_SMTP', 'smtp'),
     'SUBNET': '192.168.203.0/24',
     'POD_ADDRESS_RANGE': None
 }
@@ -79,6 +87,7 @@ class ConfigManager(dict):
         self.config['HOST_POP3'] = resolve(self.config['HOST_POP3'])
         self.config['HOST_AUTHSMTP'] = resolve(self.config['HOST_AUTHSMTP'])
         self.config['HOST_SMTP'] = resolve(self.config['HOST_SMTP'])
+        self.config['HOST_REDIS'] = resolve(self.config['HOST_REDIS'])
 
     def __coerce_value(self, value):
         if isinstance(value, str) and value.lower() in ('true','yes'):
@@ -94,12 +103,16 @@ class ConfigManager(dict):
             key: self.__coerce_value(os.environ.get(key, value))
             for key, value in DEFAULT_CONFIG.items()
         })
+        log.basicConfig(stream=sys.stderr, level=self.config["LOG_LEVEL"])
         self.resolve_host()
 
         # automatically set the sqlalchemy string
         if self.config['DB_FLAVOR']:
             template = self.DB_TEMPLATES[self.config['DB_FLAVOR']]
             self.config['SQLALCHEMY_DATABASE_URI'] = template.format(**self.config)
+
+        self.config['RATELIMIT_STORAGE_URL'] = 'redis://{0}/2'.format(self.config['HOST_REDIS'])
+        self.config['QUOTA_STORAGE_URL'] = 'redis://{0}/1'.format(self.config['HOST_REDIS'])
         # update the app config itself
         app.config = self
 
